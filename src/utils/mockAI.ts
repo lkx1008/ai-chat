@@ -169,7 +169,7 @@ export const simulateAIResponse = async (messageId: string, userMessage: string)
   const { simulateStreaming } = useStreamResponse()
 
   // 20% 的概率模拟错误
-  const shouldFail = Math.random() < 0.8
+  const shouldFail = Math.random() < 0.2
   
   if (shouldFail) {
     // 模拟网络延迟后失败
