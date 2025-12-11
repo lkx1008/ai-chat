@@ -1,5 +1,10 @@
 <template>
-  <div class="message" :class="messageClass">
+  <div
+     class="message" 
+     :class="messageClass"
+     :data-message-id="message.id"
+     :data-index="index"
+     >
     <!-- 头像和角色名称 -->
     <div class="message-avatar">
       <div class="avatar-container">
@@ -77,7 +82,20 @@ import MessageActions from './MessageActions.vue'
 import ErrorMessage from './ErrorMessage.vue'
 import { renderMarkdown } from '@/utils/markdown'
 
-const props = defineProps<{message: Message}>()
+// 定义Props
+interface Props {
+  message: Message
+  index?: number
+  virtualMode?: boolean
+  active?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  index: 0,
+  virtualMode: false,
+  active: true
+})
+// 定义emits
 const emit = defineEmits<{
   copy: [content: string]
   regenerate: [messageId: string]
@@ -86,7 +104,9 @@ const emit = defineEmits<{
 
 const messageClass = computed(() => ({
   'user-message': props.message.role === 'user',
-  'ai-message': props.message.role === 'assistant'
+  'ai-message': props.message.role === 'assistant',
+  // 添加虚拟滚动模式
+  'virtual-mode': props.virtualMode
 }))
 
 const avatarClass = computed(() => ({
@@ -170,6 +190,13 @@ onMounted(() => {
     .message-content {
       align-items: flex-start;
     }
+  }
+
+  /* 这两个属性什么意思 */
+  &.virtual-mode {
+    /* 优化虚拟滚动渲染性能 */
+    will-change: transform;
+    contain: content;
   }
 }
 
@@ -255,6 +282,9 @@ onMounted(() => {
   border: 1px solid #e0e0e0;
   border-bottom-left-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* 优化Markdown渲染性能 */
+  contain: content;
 }
 
 .loading-indicator {
@@ -304,7 +334,11 @@ onMounted(() => {
 }
 
 /* 动画效果 */
-.message {
+/* .message {
+  animation: messageAppear 0.3s ease-out;
+} */
+/* 动画效果 */
+.message:not(.virtual-mode) {
   animation: messageAppear 0.3s ease-out;
 }
 
