@@ -40,7 +40,6 @@
                   :message="message"
                   :virtual-mode="true"
                   :index="index"
-                  :active="active"
                   @copy="handleCopyMessage"
                   @regenerate="handleRegenerateMessage"
                   @retry="handleRetryMessage"
@@ -66,21 +65,14 @@
           </div>
 
           <!-- 滚动到底部按钮 -->
-          <!-- <button 
-            v-if="showScrollToBottom && useVirtualScroll"
+          <button 
+            v-if="showScrollToBottom"
             class="scroll-to-bottom-btn"
             @click="scrollToLatest"
             aria-label="滚动到底部"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/>
-            </svg>
-          </button> -->
-
-          <!-- 新消息提示 -->
-          <!-- <div v-if="newMessageCount > 0" class="new-message-indicator" @click="scrollToLatest">
-            {{ newMessageCount }} 条新消息
-          </div> -->
+            <el-icon><ArrowDown /></el-icon>
+          </button>
         </div>
       </div>
 
@@ -119,8 +111,7 @@ const normalList = ref<HTMLElement | null>(null)
 const VIRTUAL_SCROLL_THRESHOLD = 50 // 启用虚拟滚动的阈值
 
 // 状态
-// const showScrollToBottom = ref(false)
-// const newMessageCount = ref(0)
+const showScrollToBottom = ref(false)
 const userScrolled = ref(false)
 
 // 是否使用虚拟滚动
@@ -129,7 +120,7 @@ const useVirtualScroll = computed(() => {
 })
 
 // 滚动事件处理函数
-/* const handleScroll = (event: Event) => {
+const handleScroll = (event: Event) => {
   const target = event.target as HTMLElement
   const scrollTop = target.scrollTop
   const scrollHeight = target.scrollHeight
@@ -143,31 +134,28 @@ const useVirtualScroll = computed(() => {
 
   // 显示/隐藏滚动按钮
   showScrollToBottom.value = !isNearBottom
-
-  // 如果用户滚动到底部，重置新消息计数
-  if (isNearBottom) {
-    newMessageCount.value = 0
-  }
-} */
+}
 
 // 设置滚动事件监听
-/* const setupScrollListeners = () => {
+const setupScrollListeners = () => {
   // 清理之前的监听
   cleanupScrollListeners()
   
-  if (useVirtualScroll.value && scroller.value) {
-    // 监听虚拟滚动器的滚动事件
-    const scrollElement = scroller.value.$el
-    if (scrollElement) {
-      scrollElement.addEventListener('scroll', handleScroll, { passive: true })
-    }
-  } else if (normalList.value) {
-    // 监听普通列表的滚动事件
+  // 使用 nextTick 确保 DOM 更新完成
+  nextTick(() => {
+    if (useVirtualScroll.value) {
+      if (scroller.value?.$el) {
+        // 监听虚拟滚动器的滚动事件
+        scroller.value.$el.addEventListener('scroll', handleScroll, { passive: true })
+      }
+    } else if (normalList.value) {
+      // 监听普通列表的滚动事件
     normalList.value.addEventListener('scroll', handleScroll, { passive: true })
-  }
-} */
+    }
+  })
+}
 // 清理滚动事件监听
-/* const cleanupScrollListeners = () => {
+const cleanupScrollListeners = () => {
   if (scroller.value?.$el) {
     scroller.value.$el.removeEventListener('scroll', handleScroll)
   }
@@ -175,7 +163,7 @@ const useVirtualScroll = computed(() => {
   if (normalList.value) {
     normalList.value.removeEventListener('scroll', handleScroll)
   }
-} */
+}
 
 
 
@@ -184,30 +172,30 @@ onMounted(() => {
   chatStore.initializeFromStorage()
 
   // 延迟设置监听，确保DOM已渲染
-  /* nextTick(() => {
-    setupScrollListeners()
-  }) */
-})
-
-/* onUnmounted(() => {
-  cleanupScrollListeners()
-}) */
-
-// 监听虚拟滚动状态变化
-/* watch(useVirtualScroll, () => {
   nextTick(() => {
     setupScrollListeners()
   })
-}) */
+})
 
-// 监听scroller ref变化（当切换到虚拟滚动时）
-/* watch(scroller, () => {
+onUnmounted(() => {
+  cleanupScrollListeners()
+})
+
+// 监听虚拟滚动状态变化 （切换普通/虚拟模式）
+watch(useVirtualScroll, () => {
+  nextTick(() => {
+    setupScrollListeners()
+  })
+})
+
+// 监听虚拟滚动组件实例化（确保能获取到 DOM）
+watch(scroller, () => {
   if (scroller.value && useVirtualScroll.value) {
     nextTick(() => {
       setupScrollListeners()
     })
   }
-}) */
+})
 
 // 发送消息
 const handleSend = (content:string) => {
@@ -244,6 +232,9 @@ const scrollToLatest = () => {
   } else if (normalList.value) {
     normalList.value.scrollTop = normalList.value.scrollHeight
     }
+
+    // 重置状态
+    showScrollToBottom.value = false
   })
 }
 
@@ -255,15 +246,6 @@ const scrollToLatest = () => {
     }
   })
 } */
-
-// 监听消息变化，实现自动滚动
-// immediate: true，监听开始时立即执行一次
-/* watch(currentMessages, () => {
-  // 需要nextTick吗？
-  nextTick(() => {
-    scrollToLatest()
-  })
-}, { deep: true, immediate: true }) */
 
 // 监听消息变化
 watch(currentMessages, (newMessages, oldMessages) => {
@@ -283,14 +265,6 @@ watch(currentMessages, (newMessages, oldMessages) => {
   }
 },{deep: true, immediate: true })
 
-
-// 由于第一个监视器开启了深度监视，可以监视到消息内容的变化（流式响应），所以删除第二个监视器
-// 监听单个消息内容变化（用于流式响应）
-// 因为流式响应中消息的content会不断变化，但消息数组长度不变
-/* watch(
-  () => currentMessages.value.map(msg => msg.content).join('|'),
-  () => {scrollToBottom()}
-) */
 
 </script>
 
@@ -316,6 +290,7 @@ watch(currentMessages, (newMessages, oldMessages) => {
       flex: 1;
       /* overflow-y: auto; */
       overflow: hidden;
+      position: relative;
       padding: 20px;
       max-width: 900px;
       width: 100%;
@@ -353,6 +328,7 @@ watch(currentMessages, (newMessages, oldMessages) => {
 
     /* 消息列表容器样式 */
     .messages-list {
+      position: relative;
       height: 100%;
       width: 100%;
       /* display: flex;
@@ -377,6 +353,30 @@ watch(currentMessages, (newMessages, oldMessages) => {
           width: 100%;
         }
       }
+
+      /* 滚动按钮 */
+      .scroll-to-bottom-btn {
+        position: absolute;
+        right: 16px;
+        bottom: 16px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: white;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 100;
+        transition: all 0.2s ease;
+        
+        &:hover {
+          background-color: #f5f5f5;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+      }
     }
   }
 }
@@ -394,6 +394,14 @@ watch(currentMessages, (newMessages, oldMessages) => {
     
     .welcome-subtitle {
       font-size: 16px;
+    }
+
+  
+    .scroll-to-bottom-btn {
+      width: 36px;
+      height: 36px;
+      right: 12px;
+      bottom: 12px;
     }
   }
 }

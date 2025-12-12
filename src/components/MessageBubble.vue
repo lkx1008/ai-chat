@@ -87,13 +87,11 @@ interface Props {
   message: Message
   index?: number
   virtualMode?: boolean
-  active?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   index: 0,
   virtualMode: false,
-  active: true
 })
 // 定义emits
 const emit = defineEmits<{
