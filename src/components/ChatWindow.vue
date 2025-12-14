@@ -98,7 +98,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 const chatStore = useChatStore()
 
 // 处理消息的方法
-const { sendMessage,regenerateMessage,retryMessage  } = useChat() 
+const { sendMessage, regenerateMessage, retryMessage } = useChat() 
 
 //导出聊天信息
 const currentMessages = computed(() => chatStore.currentMessages)
@@ -112,7 +112,9 @@ const VIRTUAL_SCROLL_THRESHOLD = 50 // 启用虚拟滚动的阈值
 
 // 状态
 const showScrollToBottom = ref(false)
-const userScrolled = ref(false)
+const isAtBottom = ref(true) // 是否在底部
+const autoScrollPaused = ref(false) // 自动滚动是否被暂停
+const lastScrollTop = ref(0) // 上一次的滚动位置
 
 // 是否使用虚拟滚动
 const useVirtualScroll = computed(() => {
@@ -126,14 +128,26 @@ const handleScroll = (event: Event) => {
   const scrollHeight = target.scrollHeight
   const clientHeight = target.clientHeight
 
-  // 是否接近底部（距离底部100px以内）
-  const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+  // 判断是否在底部（容差5px）
+  const atBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 5
+  isAtBottom.value = atBottom
 
-  // 更新用户滚动状态
-  // userScrolled.value = !isNearBottom
+  // 判断滚动方向
+  const scrollDelta = scrollTop - lastScrollTop.value
+    
+  // 如果向上滚动（scrollDelta为负值）
+  if (scrollDelta < -10) { // -10的阈值避免微小抖动误判
+    autoScrollPaused.value = true // 暂停自动滚动
+  }
+  // 如果用户滚动到底部，恢复自动滚动
+  if (atBottom) {
+    autoScrollPaused.value = false
+  }
+
+  lastScrollTop.value = scrollTop
 
   // 显示/隐藏滚动按钮
-  showScrollToBottom.value = !isNearBottom
+  showScrollToBottom.value = !atBottom
 }
 
 // 设置滚动事件监听
@@ -150,10 +164,11 @@ const setupScrollListeners = () => {
       }
     } else if (normalList.value) {
       // 监听普通列表的滚动事件
-    normalList.value.addEventListener('scroll', handleScroll, { passive: true })
+      normalList.value.addEventListener('scroll', handleScroll, { passive: true })
     }
   })
 }
+
 // 清理滚动事件监听
 const cleanupScrollListeners = () => {
   if (scroller.value?.$el) {
@@ -165,7 +180,11 @@ const cleanupScrollListeners = () => {
   }
 }
 
-
+// 重置滚动状态
+const resetScrollState = () => {
+  autoScrollPaused.value = false
+  isAtBottom.value = true
+}
 
 // 初始化存储
 onMounted(() => {
@@ -199,9 +218,13 @@ watch(scroller, () => {
 
 // 发送消息
 const handleSend = (content:string) => {
+  // 发送消息前重置滚动状态
+  resetScrollState()
+  
   sendMessage(content)
   // 发送消息后处理滚动
   nextTick(() => {
+    // console.log('有新消息，自动滚动到底部')
     scrollToLatest()
   })
 }
@@ -213,58 +236,64 @@ const handleCopyMessage = (content: string) => {
 
 // 处理重新生成消息
 const handleRegenerateMessage = async (messageId: string) => {
-  // console.log('重新生成消息:', messageId)
+  // 重置滚动状态
+  resetScrollState()
   await regenerateMessage(messageId)
 }
 
 // 处理重试失败的消息
 const handleRetryMessage = async (messageId: string) => {
   console.log('重试消息:', messageId)
+  // 不需要重置滚动状态，因为要在原地查看消息
+  // resetScrollState()
   await retryMessage(messageId)
 }
 
-// 滚动到底部   这里的逻辑需要处理一下？
+// 滚动到底部
 const scrollToLatest = () => {
   nextTick(() => {
     if (useVirtualScroll.value && scroller.value) {
-    // 使用DynamicScroller的scrollToBottom方法
-    scroller.value.scrollToBottom()
-  } else if (normalList.value) {
-    normalList.value.scrollTop = normalList.value.scrollHeight
+      // 使用DynamicScroller的scrollToBottom方法
+      scroller.value.scrollToBottom()
+    } else if (normalList.value) {
+      normalList.value.scrollTop = normalList.value.scrollHeight
     }
 
     // 重置状态
     showScrollToBottom.value = false
+    isAtBottom.value = true
+    autoScrollPaused.value = false
   })
 }
 
-// 自动滚动到底部
-/* const scrollToBottom = () => {
+// 检查是否应该自动滚动
+const shouldAutoScroll = () => {
+  return !autoScrollPaused.value && isAtBottom.value
+}
+
+// 监听当前会话ID的变化，处理会话切换
+watch(() => chatStore.currentSessionId, () => {
+  // 切换会话时重置滚动状态并滚动到底部
+  resetScrollState()
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight - messagesContainer.value.clientHeight
-    }
+    // console.log('切换会话');
+    scrollToLatest()
   })
-} */
+})
 
-// 监听消息变化
-watch(currentMessages, (newMessages, oldMessages) => {
-  // ?? 是空值合并运算符,如果左边的值是 null 或 undefined，则返回右边的默认值 0
-  const oldLength = oldMessages?.length ?? 0
-  // 切换会话 或者 当前会话有新消息
-  if (newMessages !== oldMessages || newMessages.length > oldLength) {
-    nextTick(() => {
-      scrollToLatest()
-    })
-  } else if (newMessages.length === oldLength) {
-    // 消息内容更新（如流式响应）
-    // 延迟滚动，确保DOM已更新
+// 监听消息变化,处理同一会话内的消息更新
+watch(currentMessages, () => {
+  // 只要有消息变化，就检查是否需要滚动
+  if (shouldAutoScroll()) {
+    // 延迟一点确保DOM更新完成
     setTimeout(() => {
-      scrollToLatest()
-    }, 100)
+      if (shouldAutoScroll()) {
+        // console.log('消息内容变化，自动滚动到底部')
+        scrollToLatest()
+      }
+    }, 50)
   }
-},{deep: true, immediate: true })
-
+}, { deep: true, immediate: true })
 
 </script>
 
@@ -396,7 +425,6 @@ watch(currentMessages, (newMessages, oldMessages) => {
       font-size: 16px;
     }
 
-  
     .scroll-to-bottom-btn {
       width: 36px;
       height: 36px;
