@@ -1,6 +1,9 @@
 import { useChatStore } from "@/stores/chat"
 import { useStreamResponse } from "@/composables/useStreamResponse"
 import { getRelevantArticle, getRandomArticle } from "./mockCards"
+// 导入deepseek服务和类型
+import { createDeepSeekStream } from "./api"
+import type { DeepSeekStreamResponse } from "./api"
 
 // 包含丰富 Markdown 格式的模拟回复
 const mockResponses = [
@@ -163,11 +166,91 @@ const mockErrors = [
   }
 ]
 
-
-export const simulateAIResponse = async (messageId: string, userMessage: string): Promise<void> => {
+// 添加真实AI响应
+export const simulateAIResponse = async (
+  messageId: string, 
+  userMessage: string,
+  controller?: AbortController  // 新增参数
+): Promise<void> => {
   const chatStore = useChatStore()
   const { simulateStreaming } = useStreamResponse()
 
+  // 判断是否使用真实API
+  const useRealAPI = import.meta.env.VITE_USE_REAL_API === 'true'
+
+  // 真实API逻辑
+  if (useRealAPI) {
+    try {
+      // 准备对话消息(历史对话)
+      const messages = chatStore.currentMessages
+      .filter(msg => msg.status !== 'error')
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+      // 添加当前用户刚发送的消息
+      messages.push({role: 'user', content: userMessage})
+
+      // 使用新的流式处理器，传入controller
+      const streamProcessor = await createDeepSeekStream(messages, {
+        onChunk: (chunk, fullContent) => {
+          // 更新聊天存储中的消息，实现"打字机"效果
+          chatStore.updateMessage(messageId, {
+            content: fullContent,
+            status: 'sent'
+          })
+        },
+        onComplete: () => {
+          // 流式读取完成，最终更新消息状态为“已发送”
+          chatStore.updateMessage(messageId, {status: 'sent'})
+        },
+        onError: (error) => {
+          // 如果是中止错误，不显示错误信息
+          if (error.name === 'AbortError') {
+            console.log('请求被用户中止')
+            return
+          }
+          // 错误处理：显示友好提示，方便排查问题
+          console.error('DeepSeek API调用失败：', error)
+          const errorMsg = error instanceof Error ? error.message : 'API请求失败，请检查密钥/网络是否正常'
+          // 更新消息状态为错误，方便前端显示重试按钮
+          chatStore.updateMessage(messageId, {
+            status: 'error',
+            errorInfo: {
+              message: errorMsg,
+              code: 'API_ERROR',
+              retryable: true
+            }
+          })
+        },
+        controller  // 传递controller
+      })
+
+      // 处理流式响应 
+      await streamProcessor.process()
+    } catch (error) {
+      // 错误处理：如果是中止错误，不显示错误信息
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('请求被用户中止')
+        return
+      }
+      
+      console.error('DeepSeek API调用失败：', error)
+      const errorMsg = error instanceof Error ? error.message : 'API请求失败，请检查密钥/网络是否正常'
+      // 更新消息状态为错误，方便前端显示重试按钮
+      chatStore.updateMessage(messageId, {
+        status: 'error',
+        errorInfo: {
+          message: errorMsg,
+          code: 'API_ERROR',
+          retryable: true
+        }
+      })
+    }
+    return // 真实API逻辑结束，不再执行原有模拟逻辑
+  }
+
+  // 原有模拟响应逻辑
   // 20% 的概率模拟错误
   const shouldFail = Math.random() < 0.2
   

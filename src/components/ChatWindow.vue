@@ -10,74 +10,94 @@
       <div class="header">
         AI对话助手
       </div>
-      <!-- 消息区域 -->
-      <div class="messages-container" ref="messagesContainer">
-        <!-- 无对话时 -->
-        <div v-if="!currentMessages.length" class="welcome-container">
-          <h1 class="welcome-title">你好！</h1>
-          <p class="welcome-subtitle">我是您的AI助手，可以回答各种问题、协助解决问题或进行创意对话</p>
-        </div>
-        <!-- 有对话时，超过消息阈值使用虚拟滚动 -->
-        <div v-else class="messages-list">
-          <!-- DynamicScroller 虚拟滚动容器 -->
-          <DynamicScroller
-            v-if="useVirtualScroll"
-            ref="scroller"
-            class="dynamic-scroller"
-            :items="currentMessages"
-            :min-item-size="60"
-            :buffer="200"
-            key-field="id"
-          >
-            <template #default="{ item: message, index, active }">
-              <DynamicScrollerItem
-                :item="message"
-                :data-index="index"
-                :active="active"
-                :size-dependencies="[message.content, message.type]"
+      
+      <!-- 主要内容区域 - 改为flex布局 -->
+      <div class="main-content">
+        <!-- 消息区域 -->
+        <div class="messages-container" ref="messagesContainer">
+          <!-- 无对话时 -->
+          <div v-if="!currentMessages.length" class="welcome-container">
+            <h1 class="welcome-title">你好！</h1>
+            <p class="welcome-subtitle">我是您的AI助手，可以回答各种问题、协助解决问题或进行创意对话</p>
+          </div>
+          
+          <!-- 有对话时，超过消息阈值使用虚拟滚动 -->
+          <div v-else class="messages-list-wrapper">
+            <!-- DynamicScroller 虚拟滚动容器 -->
+            <DynamicScroller
+              v-if="useVirtualScroll"
+              ref="scroller"
+              class="dynamic-scroller"
+              :items="currentMessages"
+              :min-item-size="60"
+              :buffer="200"
+              key-field="id"
+            >
+              <template #default="{ item: message, index, active }">
+                <DynamicScrollerItem
+                  :item="message"
+                  :data-index="index"
+                  :active="active"
+                  :size-dependencies="[message.content, message.type]"
+                >
+                  <MessageBubble
+                    :message="message"
+                    :virtual-mode="true"
+                    :index="index"
+                    @copy="handleCopyMessage"
+                    @regenerate="handleRegenerateMessage"
+                    @retry="handleRetryMessage"
+                  />
+                </DynamicScrollerItem>
+              </template>
+            </DynamicScroller>
+
+            <!-- 普通列表（用于少量消息） -->
+            <div v-else ref="normalList" class="normal-messages-list">
+              <div 
+                v-for="message in currentMessages" 
+                :key="message.id"
+                class="message-wrapper"
               >
                 <MessageBubble
                   :message="message"
-                  :virtual-mode="true"
-                  :index="index"
                   @copy="handleCopyMessage"
                   @regenerate="handleRegenerateMessage"
                   @retry="handleRetryMessage"
                 />
-              </DynamicScrollerItem>
-            </template>
-          </DynamicScroller>
-
-          <!-- 普通列表（用于少量消息） -->
-          <div v-else ref="normalList" class="normal-messages-list">
-            <div 
-              v-for="message in currentMessages" 
-              :key="message.id"
-              class="message-wrapper"
-            >
-              <MessageBubble
-                :message="message"
-                @copy="handleCopyMessage"
-                @regenerate="handleRegenerateMessage"
-                @retry="handleRetryMessage"
-              />
+              </div>
             </div>
-          </div>
 
-          <!-- 滚动到底部按钮 -->
+            <!-- 滚动到底部按钮 -->
+            <button 
+              v-if="showScrollToBottom"
+              class="scroll-to-bottom-btn"
+              @click="scrollToLatest"
+              aria-label="滚动到底部"
+            >
+              <el-icon><ArrowDown /></el-icon>
+            </button>
+          </div>
+        </div>
+
+        <!-- 输入区域，包含停止按钮 -->
+        <div class="input-area">
+          <!-- 输入框 -->
+          <Input @send="handleSend"></Input>
+          
+          <!-- 停止按钮（当AI正在生成时显示） -->
           <button 
-            v-if="showScrollToBottom"
-            class="scroll-to-bottom-btn"
-            @click="scrollToLatest"
-            aria-label="滚动到底部"
+            v-if="isAIThinking" 
+            @click="handleStopGeneration"
+            class="stop-generation-btn"
+            aria-label="停止生成"
           >
-            <el-icon><ArrowDown /></el-icon>
+            <el-icon><Close /></el-icon>
+            停止生成
           </button>
         </div>
+        
       </div>
-
-      <!-- 输入框 -->
-      <Input @send="handleSend"></Input>      
     </div>
   </div>
 </template>
@@ -98,7 +118,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 const chatStore = useChatStore()
 
 // 处理消息的方法
-const { sendMessage, regenerateMessage, retryMessage } = useChat() 
+const { sendMessage, regenerateMessage, retryMessage, isAIThinking, stopCurrentResponse  } = useChat() 
 
 //导出聊天信息
 const currentMessages = computed(() => chatStore.currentMessages)
@@ -229,6 +249,11 @@ const handleSend = (content:string) => {
   })
 }
 
+// 处理停止生成
+const handleStopGeneration = () => {
+  stopCurrentResponse()
+}
+
 // 处理复制消息
 const handleCopyMessage = (content: string) => {
   console.log('复制消息内容:', content)
@@ -301,40 +326,61 @@ watch(currentMessages, () => {
 .chat-container {
   height: 100vh;
   display: flex;
+  overflow: hidden;
+
+  .container-left {
+    flex-shrink: 0;
+    height: 100%;
+  }
 
   .container-right {
     flex: 1;
     display: flex;
     flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #f8f9fa;
+    position: relative;
 
     .header {
+      flex-shrink: 0;
       padding: 16px 24px;
       font-size: 18px;
       font-weight: 600;
       border-bottom: 1px solid rgba(0, 0, 0, 0.1);
       background-color: white;
+      z-index: 10;
+    }
+
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      padding: 0;
     }
 
     .messages-container {
       flex: 1;
-      /* overflow-y: auto; */
-      overflow: hidden;
-      position: relative;
-      padding: 20px;
-      max-width: 900px;
-      width: 100%;
-      margin: 0 auto; // 水平居中
       display: flex;
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      max-width: 100%;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px 0;
+      box-sizing: border-box;
     }
 
     /* 欢迎界面样式 */
     .welcome-container {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100%;
       text-align: center;
       padding: 40px;
     }
@@ -356,38 +402,81 @@ watch(currentMessages, () => {
     }
 
     /* 消息列表容器样式 */
-    .messages-list {
+    .messages-list-wrapper {
       position: relative;
-      height: 100%;
-      width: 100%;
-      /* display: flex;
+      flex: 1;
+      min-height: 0;
+      display: flex;
       flex-direction: column;
-      gap: 16px; */
+      overflow: hidden;
 
       .dynamic-scroller {
-        height: 100%;
-        width: 100%;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto !important;
+        overflow-x: hidden;
+        padding: 8px 20px;
+        
+        /* 自定义滚动条样式 */
+        &::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        &::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 4px;
+        }
+        
+        &::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 4px;
+          
+          &:hover {
+            background: rgba(0, 0, 0, 0.3);
+          }
+        }
       }
 
       .normal-messages-list {
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         overflow-y: auto;
-        width: 100%;
+        overflow-x: hidden;
         display: flex;
         flex-direction: column;
         gap: 16px;
-        padding: 8px 0;
+        padding: 8px 20px;
+        
+        /* 自定义滚动条样式 */
+        &::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        &::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.05);
+          border-radius: 4px;
+        }
+        
+        &::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 4px;
+          
+          &:hover {
+            background: rgba(0, 0, 0, 0.3);
+          }
+        }
         
         .message-wrapper {
           width: 100%;
+          box-sizing: border-box;
         }
       }
 
       /* 滚动按钮 */
       .scroll-to-bottom-btn {
         position: absolute;
-        right: 16px;
-        bottom: 16px;
+        right: 32px;
+        bottom: 20px;
         width: 40px;
         height: 40px;
         border-radius: 50%;
@@ -407,12 +496,58 @@ watch(currentMessages, () => {
         }
       }
     }
+     /* 输入区域样式 */
+    .input-area {
+      position: relative;
+      // padding: 0 20px 20px;
+    }
+
+    /* 停止生成按钮 */
+    .stop-generation-btn {
+      position: absolute;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      background-color: #ff4d4f;
+      color: white;
+      border: none;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(255, 77, 79, 0.3);
+      transition: all 0.2s ease;
+      z-index: 10;
+
+      &:hover {
+        background-color: #ff7875;
+        box-shadow: 0 4px 12px rgba(255, 77, 79, 0.4);
+      }
+    }
   }
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
   .chat-container .container-right {
+    .main-content {
+      padding: 0;
+    }
+    
+    .messages-container {
+      padding: 12px 0;
+    }
+    
+    .messages-list-wrapper {
+      .dynamic-scroller,
+      .normal-messages-list {
+        padding: 8px 12px;
+      }
+    }
+    
     .welcome-container {
       padding: 20px;
     }
@@ -428,8 +563,17 @@ watch(currentMessages, () => {
     .scroll-to-bottom-btn {
       width: 36px;
       height: 36px;
-      right: 12px;
-      bottom: 12px;
+      right: 16px;
+      bottom: 16px;
+    }
+    /* .input-area {
+      padding: 0 12px 12px;
+    } */
+    
+    .stop-generation-btn {
+      top: -36px;
+      font-size: 11px;
+      padding: 5px 10px;
     }
   }
 }

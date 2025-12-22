@@ -172,10 +172,10 @@ onMounted(() => {
   display: flex;
   margin-bottom: 24px;
   max-width: 100%;
+  width: 100%;
   
   &.user-message {
     flex-direction: row-reverse;
-    align-self: flex-end;
     
     .message-content {
       align-items: flex-end;
@@ -183,14 +183,11 @@ onMounted(() => {
   }
   
   &.ai-message {
-    align-self: flex-start;
-    
     .message-content {
       align-items: flex-start;
     }
   }
 
-  /* 这两个属性什么意思 */
   &.virtual-mode {
     /* 优化虚拟滚动渲染性能 */
     will-change: transform;
@@ -245,8 +242,16 @@ onMounted(() => {
 .message-content {
   display: flex;
   flex-direction: column;
-  max-width: 70%;
-  min-width: 120px;
+  max-width: 100%;
+  min-width: 0;
+  
+  .ai-message & {
+    max-width: 100%;
+  }
+  
+  .user-message & {
+    max-width: 100%;
+  }
 }
 
 .message-text {
@@ -255,11 +260,14 @@ onMounted(() => {
   line-height: 1.5;
   word-wrap: break-word;
   white-space: pre-wrap;
+  max-width: 100%;
+  box-sizing: border-box;
   
   .user-message & {
     background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
     color: white;
     border-bottom-right-radius: 4px;
+    align-self: flex-end;
   }
   
   .ai-message & {
@@ -268,6 +276,7 @@ onMounted(() => {
     border: 1px solid #e0e0e0;
     border-bottom-left-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    align-self: flex-start;
   }
 }
 
@@ -280,9 +289,12 @@ onMounted(() => {
   border: 1px solid #e0e0e0;
   border-bottom-left-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-
-  /* 优化Markdown渲染性能 */
+  max-width: 100%;
+  box-sizing: border-box;
   contain: content;
+  overflow-x: visible;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .loading-indicator {
@@ -332,10 +344,6 @@ onMounted(() => {
 }
 
 /* 动画效果 */
-/* .message {
-  animation: messageAppear 0.3s ease-out;
-} */
-/* 动画效果 */
 .message:not(.virtual-mode) {
   animation: messageAppear 0.3s ease-out;
 }
@@ -368,8 +376,8 @@ onMounted(() => {
     margin-bottom: 16px;
   }
   
-  .message-content {
-    max-width: 85%;
+  .message-avatar {
+    margin: 0 8px;
   }
   
   .avatar {
@@ -383,5 +391,84 @@ onMounted(() => {
     padding: 10px 14px;
     font-size: 14px;
   }
+}
+</style>
+
+<style>
+/* 全局样式，用于代码块和表格横向滚动 */
+.markdown-content pre {
+  max-width: 100%;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  padding: 12px 16px;
+  margin: 8px 0;
+  background-color: #f6f8fa;
+  border-radius: 6px;
+  border: 1px solid #e1e4e8;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.markdown-content pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-content pre::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  margin: 4px;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.markdown-content pre code {
+  white-space: pre;
+  display: block;
+  padding: 0;
+  background-color: transparent;
+  color: #24292e;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  padding: 8px 12px;
+  border: 1px solid #dfe2e5;
+  white-space: nowrap;
+}
+
+.markdown-content table th {
+  background-color: #f6f8fa;
+  font-weight: 600;
+}
+
+.markdown-content a {
+  word-break: break-all;
+}
+
+.markdown-content code:not(pre code) {
+  padding: 2px 4px;
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.9em;
 }
 </style>
