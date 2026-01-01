@@ -185,9 +185,9 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 生成id的工具函数
+  // 生成id的工具函数   替换已弃用的方法
   const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2)
+    return Date.now().toString(36) + Math.random().toString(36).slice(2)
   }
 
   return {

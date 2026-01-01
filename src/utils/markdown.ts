@@ -44,8 +44,8 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   // 使用highlight.js对代码进行高亮处理，得到高亮后的HTML字符串
   const highlighted = hljs.highlight(code, { language: validLang }).value
   
-  // 生成唯一ID用于复制功能
-  const copyId = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  // 生成唯一ID用于复制功能   修正弃用的方法
+  const copyId = `code-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
   
   // 返回的HTML字符串
   // data-copy-id 为自定义属性，用于关联按钮和代码元素
@@ -76,6 +76,12 @@ if (typeof window !== 'undefined') {
     
     const code = codeElement.textContent || ''
     
+    // 简单兼容性检查
+    if (!navigator.clipboard) {
+      alert('您的浏览器不支持自动复制功能，请手动选择并复制代码')
+      return
+    }
+
     try {
       // 使用navigator.clipboardAPI将代码文本复制到剪贴板
       await navigator.clipboard.writeText(code)
@@ -94,13 +100,8 @@ if (typeof window !== 'undefined') {
       }
     } catch (err) {
       console.error('复制失败:', err)
-      // 降级方案
-      const textArea = document.createElement('textarea')
-      textArea.value = code
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
+      // 删除了降级方案（使用了已弃用的方法）
+      alert('复制失败，请手动选择并复制代码')
     }
   }
 }

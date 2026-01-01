@@ -48,20 +48,11 @@ const handleCopy = async () => {
     emit('copy', props.content)
   } catch (err) {
     console.error('复制失败:', err)
-    // 降级方案
-    const textArea = document.createElement('textarea')
-    textArea.value = props.content
-    document.body.appendChild(textArea)
-    textArea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textArea)
-    
-    copyTooltip.value = '已复制!'
+    // 简化错误处理：直接提示用户
+    copyTooltip.value = '复制失败'
     setTimeout(() => {
       copyTooltip.value = '复制内容'
     }, 2000)
-    
-    emit('copy', props.content)
   }
 }
 
