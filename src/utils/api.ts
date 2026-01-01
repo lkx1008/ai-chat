@@ -90,15 +90,44 @@ export const createDeepSeekStream = async (
           while (true) {
             const {done, value} = await reader.read()
             // 如果读取完成，退出循环
-            if (done) break
+            if (done) {
+              // 流结束时，处理缓冲区中可能剩余的最后一个完整数据
+              if (buffer.trim()) {
+                // 尝试处理缓冲区中剩余的数据
+                if (buffer.startsWith('data: ')) {
+                  if (buffer === 'data: [DONE]') {
+                    // 流正常结束
+                    options?.onComplete?.(fullContent)
+                    return fullContent
+                  }
+
+                  // 尝试解析最后一个数据块
+                  try {
+                    const data = buffer.replace(/^data: /, '').trim()
+                    if (data) {
+                      const json = JSON.parse(data) as DeepSeekStreamResponse
+                      const content = json.choices[0]?.delta?.content || ''
+                      if (content) {
+                        fullContent += content
+                        // 流结束时立即更新，不再节流
+                        options?.onChunk?.(content, fullContent)
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('流结束时解析缓冲区数据失败:', buffer.slice(0, 100))
+                  }
+                }
+              }
+              break
+            }
 
             // 解码二进制数据为文本并缓存分块（处理不完整的JSON）
-            // buffer += decoder.decode(value, {stream: true}) 
-            const chunk = decoder.decode(value, {stream: true}) 
+            buffer += decoder.decode(value, {stream: true}) 
+            // const chunk = decoder.decode(value, {stream: true}) 
             // 按行分割DeepSeek的流式响应每行是一个数据块）
-            const lines = chunk.split('\n').filter(line => line.trim() !== '')
+            const lines = buffer.split('\n')
             // 保留最后一行（可能是不完整的分块）
-            // buffer = lines.pop() || ''
+            buffer = lines.pop() || ''
 
             // 遍历每一行数据，解析并更新UI
             for (const line of lines) {
@@ -113,6 +142,8 @@ export const createDeepSeekStream = async (
                 try {
                   // 移除DeepSeek流数据的前缀（格式是：data: {JSON}）
                   const data = line.replace(/^data: /, '').trim()
+                  // 跳过空数据
+                  if (!data) continue
                   // 解析JSON数据（匹配第一步定义的类型）
                   const json = JSON.parse(data) as DeepSeekStreamResponse
                   // 获取本次返回的文本片段（逐字/逐词）

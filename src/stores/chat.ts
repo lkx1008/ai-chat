@@ -21,10 +21,12 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  // 保存会话数据到本地存储（节流处理）
+  // 防抖式存储优化，避免频繁IO操作
+  // 连续触发时，只执行最后一次保存
   let saveTimeout: number | null = null
   const saveToStorage = () => {
     // 检查是否有已经设置的定时器
+    // 防抖逻辑：清除上次的定时器，重新设置
     if (saveTimeout) {
       // clearTimeout()方法取消先前通过调用setTimeout()建立的超时任务
       clearTimeout(saveTimeout)
